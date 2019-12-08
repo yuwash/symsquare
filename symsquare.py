@@ -2,6 +2,7 @@
 from __future__ import print_function
 from argparse import ArgumentParser
 from functools import partial
+from io import StringIO
 
 
 def ascii_map_x(value):
@@ -23,7 +24,7 @@ def draw_ascii(bitmap, out=None, map_function=ascii_map_x):
     """
     print_kwargs = {} if out is None else {"file": out}
     for row in bitmap:
-        print(''.join(map(map_function, row)), **print_kwargs)
+        print(u''.join(map(map_function, row)), **print_kwargs)
 
 
 def abs_to_ref(x, y, size):
@@ -194,16 +195,30 @@ def classic_output(bitmaps, out=None):
         draw_ascii(bitmap, out=out)
 
 
-def aske_output(bitmaps, out=None):
+def aske_output(bitmaps, out=None, columns=1):
     print_kwargs = {} if out is None else {"file": out}
     print(
         '---\n'
         '# generated with symsquare\n'
         'background-color: 0xffffffff\n'  # same color used in ascii_map_aske
         '...', **print_kwargs)
-    for bitmap in bitmaps:
+    lines_buffer = []
+    for i, bitmap in enumerate(bitmaps):
+        if i % columns == 0 and lines_buffer:
+            print('', **print_kwargs)  # just a blank line
+            for line in lines_buffer:
+                print(line)
+            lines_buffer = []
+        with StringIO() as temp_out:
+            draw_ascii(bitmap, out=temp_out, map_function=ascii_map_aske)
+            item_lines = temp_out.getvalue().split('\n')
+        lines_buffer[:len(item_lines)] = map(
+            ' '.join, zip(lines_buffer, item_lines))
+        lines_buffer += item_lines[len(lines_buffer):]
+    if lines_buffer:
         print('', **print_kwargs)  # just a blank line
-        draw_ascii(bitmap, out=out, map_function=ascii_map_aske)
+        for line in lines_buffer:
+            print(line)
 
 
 if __name__ == "__main__":
@@ -218,6 +233,7 @@ if __name__ == "__main__":
     variants_bitmap = map(
         partial(tridata_to_bitmap, size=size), build_variants(size))
     if parsed_args.aske:
-        aske_output(variants_bitmap)
+        aske_output(variants_bitmap, columns=(size**2)//2)
+        # the column number is a deliberate choice
     else:
         classic_output(variants_bitmap)
