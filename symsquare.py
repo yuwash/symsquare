@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 from argparse import ArgumentParser
+from functools import partial
 
 
-def draw_ascii(bitmap, out=None):
+def ascii_map_x(value):
+    return 'X' if value else '-'
+
+
+def ascii_map_aske(value):
+    return 'g' if value else 'f'
+
+
+def draw_ascii(bitmap, out=None, map_function=ascii_map_x):
     """
     >>> draw_ascii([(1, 0), (1, 0, 0)])
     X-
@@ -14,7 +23,7 @@ def draw_ascii(bitmap, out=None):
     """
     print_kwargs = {} if out is None else {"file": out}
     for row in bitmap:
-        print(''.join('X' if pix else '-' for pix in row), **print_kwargs)
+        print(''.join(map(map_function, row)), **print_kwargs)
 
 
 def abs_to_ref(x, y, size):
@@ -170,12 +179,37 @@ def int_to_bits(value, length):
     return tuple((value >> i) % 2 for i in range(length))
 
 
+def classic_output(bitmaps, out=None):
+    print_kwargs = {} if out is None else {"file": out}
+    for i, bitmap in enumerate(bitmaps):
+        print(i, **print_kwargs)
+        draw_ascii(bitmap, out=out)
+
+
+def aske_output(bitmaps, out=None):
+    print_kwargs = {} if out is None else {"file": out}
+    print(
+        '---\n'
+        '# generated with symsquare\n'
+        'background-color: 0xffffffff\n'  # same color used in ascii_map_aske
+        '...', **print_kwargs)
+    for bitmap in bitmaps:
+        print('', **print_kwargs)  # just a blank line
+        draw_ascii(bitmap, out=out, map_function=ascii_map_aske)
+
+
 if __name__ == "__main__":
     argparser = ArgumentParser(description='Draw symmetric square variations')
     argparser.add_argument(
         'size', type=int, default=3, nargs='?', help='canvas size')
+    argparser.add_argument(
+        '--aske', action='store_true',
+        help='output in aske format (yuwash/askiisketch)')
     parsed_args = argparser.parse_args()
     size = parsed_args.size
-    for i, tridata in enumerate(build_variants(size)):
-        print(i)
-        draw_ascii(tridata_to_bitmap(tridata, size))
+    variants_bitmap = map(
+        partial(tridata_to_bitmap, size=size), build_variants(size))
+    if parsed_args.aske:
+        aske_output(variants_bitmap)
+    else:
+        classic_output(variants_bitmap)
