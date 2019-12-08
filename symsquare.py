@@ -122,7 +122,7 @@ def tridata_to_bitmap_row(tridata, size, row):
     -X-
     XXX
     -X-
-    >>> tridata = int_to_bits(1, 3), int_to_bits(1, 3), [1]
+    >>> tridata = int_to_bits(4, 3), int_to_bits(1, 3), [1]
     >>> draw_ascii(tridata_to_bitmap(tridata, 5))
     ---X-
     X-X--
@@ -139,16 +139,20 @@ def tridata_to_bitmap_row(tridata, size, row):
             ref_x, ref_y = ref_y, 0
             # use the lower triangle for the central column/row
         if ref_y < ref_x:
-            yield get_from_triangle_upsidedown(
-                ref_x - ref_y - 1, ref_y, lower, reflen - 1)
-            # begin x at the column next to the diagonal
+            yield get_from_triangle(
+                reflen - 1 - ref_x, reflen - 2 - ref_y, lower)
+            # in the lower triangle:
+            # x goes from right to left (against the x axis)
+            # y goes from top to bottom (against the y axis)
+            # always shift y for diagonal
         elif ref_x == ref_y:
             yield diag[ref_x]
         else:
-            center_shift = size % 2
-            # upper doesn’t contain first column/row if central
             yield get_from_triangle(
-                ref_x - center_shift, ref_y - center_shift - 1, upper)
+                reflen - 1 - ref_y, reflen - 2 - ref_x, upper)
+            # in the upper triangle:
+            # x goes from top to bottom (against the y axis)
+            # y goes from right to left (against the x axis)
             # always shift y for diagonal
 
 
@@ -157,14 +161,18 @@ def build_variants(size):
     lower_vol = triangle_volume(reflen - 1)
     upper_vol = lower_vol - (reflen - 1)*(size % 2)
     # remove central column from upper (only relevant for odd size)
-    for l_value in range(2**lower_vol):
+    l_value_sup = 2**lower_vol
+    u_value_sup = 2**upper_vol
+    d_value_sup = 2**(reflen - 1)
+    # the outermost pixel of diag is always 0 to remove half of the
+    # variations because the inverse should exist
+    for l_value in range(l_value_sup):
         lower = int_to_bits(l_value, lower_vol)
-        for u_value in range(l_value % (2**upper_vol) + 1):
-            # eliminate symmetric, therefore only u_value <= l_value
+        for u_value in range(min(u_value_sup, l_value % u_value_sup + 1)):
+            # eliminate symmetric, therefore only
+            # u_value <= “l_value without central row/column”
             upper = int_to_bits(u_value, upper_vol)
-            for d_value in range(2**(reflen - 1)):
-                # the outermost pixel is always 0 to remove half of the
-                # variations because the inverse should exist
+            for d_value in range(d_value_sup):
                 diag = int_to_bits(d_value, reflen)
                 yield lower, diag, upper
 
