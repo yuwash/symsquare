@@ -13,6 +13,10 @@ def ascii_map_aske(value):
     return 'g' if value else 'f'
 
 
+def ascii_map_aske_duo(value):
+    return 'gM' if value else 'ff'
+
+
 def draw_ascii(bitmap, out=None, map_function=ascii_map_x):
     """
     >>> draw_ascii([(1, 0), (1, 0, 0)])
@@ -195,30 +199,87 @@ def classic_output(bitmaps, out=None):
         draw_ascii(bitmap, out=out)
 
 
-def aske_output(bitmaps, out=None, columns=1):
-    print_kwargs = {} if out is None else {"file": out}
-    print(
-        '---\n'
-        '# generated with symsquare\n'
-        'background-color: 0xffffffff\n'  # same color used in ascii_map_aske
-        '...', **print_kwargs)
-    lines_buffer = []
-    for i, bitmap in enumerate(bitmaps):
-        if i % columns == 0 and lines_buffer:
+class AskeRenderer(object):
+    background_color = '0xffffffff'  # same color used in ascii_map_aske
+
+    def __init__(self, columns=1, mode='aske:mono'):
+        self.columns = columns
+        self.mode = mode
+        self.map_function = (
+            ascii_map_aske_duo if mode == 'aske:duo' else ascii_map_aske)
+        self.fill_methods = ['rectangle']
+        if self.mode == 'aske:duo':
+            self.fill_methods.append('oscar')
+        self.aske_header = (
+            '---\n'
+            '# generated with symsquare\n'
+            'background-color: {}\n'
+            'fill-methods:\n'
+        ).format(self.background_color) + ''.join(
+            '- "{}"\n'.format(fill_method)
+            for fill_method in self.fill_methods) + '...'
+        self.margin = '  ' if mode == 'aske:duo' else ' '
+
+    def __call__(self, bitmaps, out=None):
+        print_kwargs = {} if out is None else {"file": out}
+        print(self.aske_header, **print_kwargs)
+        lines_buffer = []
+        for i, bitmap in enumerate(bitmaps):
+            if i % self.columns == 0 and lines_buffer:
+                print('', **print_kwargs)  # just a blank line
+                for line in lines_buffer:
+                    print(line)
+                lines_buffer = []
+            with StringIO() as temp_out:
+                draw_ascii(
+                    bitmap, out=temp_out, map_function=self.map_function)
+                item_lines = temp_out.getvalue().split('\n')
+            lines_buffer[:len(item_lines)] = map(
+                self.margin.join, zip(lines_buffer, item_lines))
+            lines_buffer += item_lines[len(lines_buffer):]
+        if lines_buffer:
             print('', **print_kwargs)  # just a blank line
             for line in lines_buffer:
                 print(line)
-            lines_buffer = []
-        with StringIO() as temp_out:
-            draw_ascii(bitmap, out=temp_out, map_function=ascii_map_aske)
-            item_lines = temp_out.getvalue().split('\n')
-        lines_buffer[:len(item_lines)] = map(
-            ' '.join, zip(lines_buffer, item_lines))
-        lines_buffer += item_lines[len(lines_buffer):]
-    if lines_buffer:
-        print('', **print_kwargs)  # just a blank line
-        for line in lines_buffer:
-            print(line)
+
+
+def main(size, mode):
+    """
+    >>> main(1, 'classic')
+    0
+    -
+    >>> main(3, 'aske:mono')
+    ---
+    # generated with symsquare
+    background-color: 0xffffffff
+    fill-methods:
+    - "rectangle"
+    ...
+    <BLANKLINE>
+    fff fff fgf fgf
+    fff fgf gfg ggg
+    fff fff fgf fgf
+    <BLANKLINE>
+    >>> main(1, 'aske:duo')
+    ---
+    # generated with symsquare
+    background-color: 0xffffffff
+    fill-methods:
+    - "rectangle"
+    - "oscar"
+    ...
+    <BLANKLINE>
+    ff
+    <BLANKLINE>
+    """
+    variants_bitmap = map(
+        partial(tridata_to_bitmap, size=size), build_variants(size))
+    if mode[:5] == 'aske:':
+        renderer = AskeRenderer(columns=(size**2)//2 or 1, mode=mode)
+        # the column number is a deliberate choice
+    else:
+        renderer = classic_output
+    renderer(variants_bitmap)
 
 
 if __name__ == "__main__":
@@ -229,11 +290,5 @@ if __name__ == "__main__":
         '--aske', action='store_true',
         help='output in aske format (yuwash/askiisketch)')
     parsed_args = argparser.parse_args()
-    size = parsed_args.size
-    variants_bitmap = map(
-        partial(tridata_to_bitmap, size=size), build_variants(size))
-    if parsed_args.aske:
-        aske_output(variants_bitmap, columns=(size**2)//2)
-        # the column number is a deliberate choice
-    else:
-        classic_output(variants_bitmap)
+    mode = 'aske:mono' if parsed_args.aske else 'classic'
+    main(size=parsed_args.size, mode=mode)
